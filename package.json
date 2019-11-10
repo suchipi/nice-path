@@ -4,6 +4,7 @@
   "main": "dist/index.js",
   "repository": "suchipi/betterpath",
   "author": "Lily Scott <me@suchipi.com>",
+  "license": "MIT",
   "keywords": [
     "path",
     "directory",
