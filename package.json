@@ -1,8 +1,8 @@
 {
-  "name": "betterpath",
+  "name": "nice-path",
   "version": "0.1.1",
   "main": "dist/index.js",
-  "repository": "suchipi/betterpath",
+  "repository": "suchipi/nice-path",
   "author": "Lily Scott <me@suchipi.com>",
   "license": "MIT",
   "keywords": [

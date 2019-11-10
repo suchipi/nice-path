@@ -1,6 +1,6 @@
-# betterpath
+# nice-path
 
-`betterpath` is a replacement for the [Node.js](https://nodejs.org/) `path` builtin module.
+`nice-path` is a replacement for the [Node.js](https://nodejs.org/) `path` builtin module.
 
 ## The Problem
 
@@ -15,7 +15,7 @@ This package treats paths as first-class objects, and distinguishes between abso
 ## Usage Example
 
 ```ts
-import { Path, AbsolutePath } from "betterpath";
+import { Path, AbsolutePath } from "nice-path";
 import fs from "fs";
 
 const absolutePath = Path.fromAbsolutePathString("/tmp/some-folder/");
