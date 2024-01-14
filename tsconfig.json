@@ -3,10 +3,11 @@
   "exclude": ["./src/**/*.test.ts"],
 
   "compilerOptions": {
-    "lib": ["es2015"],
-    "target": "es5",
+    "lib": ["es2020"],
+    "target": "es2020",
     "module": "commonjs",
     "outDir": "./dist",
+    "declaration": true,
 
     "strict": true,
     "noImplicitAny": true,

@@ -2,8 +2,11 @@
   "name": "nice-path",
   "version": "0.1.1",
   "main": "dist/index.js",
-  "repository": "suchipi/nice-path",
-  "author": "Lily Scott <me@suchipi.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/suchipi/nice-path.git"
+  },
+  "author": "Lily Skye <me@suchipi.com>",
   "license": "MIT",
   "keywords": [
     "path",
@@ -13,17 +16,14 @@
     "file"
   ],
   "devDependencies": {
-    "@types/jest": "^24.0.18",
-    "@types/node": "^9.6.22",
-    "jest": "^24.9.0",
-    "mock-fs": "^4.10.3",
-    "prettier": "^1.18.2",
-    "ts-jest": "^24.1.0",
-    "typescript": "^3.6.4"
+    "@types/node": "^20.11.0",
+    "prettier": "^3.2.2",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
   },
   "scripts": {
     "build": "rm -rf dist && tsc && cp src/index.ts dist/index.ts",
     "build:watch": "tsc -w",
-    "test": "jest"
+    "test": "vitest"
   }
 }
