@@ -1,6 +1,6 @@
 # nice-path
 
-`nice-path` provides a class that represents a filesystem path (POSIX-style or Win32-style), which has various nice methods on it that make it easy to work with.
+`nice-path` provides a class that represents a filesystem path (POSIX-style or Win32-style), which has various nice methods on it that make it easy to work with. It can be used as a replacement for the Node.js `path` builtin module, where you pass around Path objects and stringify them before use, rather than passing around strings.
 
 ## Example
 
