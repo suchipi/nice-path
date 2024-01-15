@@ -2,6 +2,7 @@
   "name": "nice-path",
   "version": "0.1.1",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/suchipi/nice-path.git"
@@ -22,7 +23,7 @@
     "vitest": "^1.2.0"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc && cp src/index.ts dist/index.ts",
+    "build": "rm -rf dist && tsc",
     "build:watch": "tsc -w",
     "test": "vitest"
   }
