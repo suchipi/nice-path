@@ -218,51 +218,95 @@ The `dirname` method returns a new Path containing all of the segments in the ta
 
 #### `startsWith(value): boolean` (instance method of Path)
 
-TODO
+The `startsWith` method returns whether the target Path starts with the provided value (string, Path, or Array of string/Path), by comparing one path segment at a time, left-to-right.
+
+The starting segment(s) of the target Path must _exactly_ match the segment(s) in the provided value.
+
+This means that, given two Paths A and B:
+
+```
+  A: Path { /home/user/.config }
+  B: Path { /home/user/.config2 }
+```
+
+Path B does _not_ start with Path A, because `".config" !== ".config2"`.
 
 #### `endsWith(value): boolean` (instance method of Path)
 
-TODO
+The `endsWith` method returns whether the target Path ends with the provided value (string, Path, or Array of string/Path), by comparing one path segment at a time, right-to-left.
+
+The ending segment(s) of the target Path must _exactly_ match the segment(s) in the provided value.
+
+This means that, given two Paths A and B:
+
+```
+  A: Path { /home/1user/.config }
+  B: Path { user/.config }
+```
+
+Path A does _not_ end with Path B, because `"1user" !== "user"`.
 
 #### `indexOf(value, fromIndex?): number;` (instance method of Path)
 
-TODO
+The `indexOf` method returns the path segment index (number) at which `value` (string, Path, or Array of string/Path) appears in the target Path, or `-1` if it doesn't appear.
+
+If the provided value argument contains more than one path segment, the returned index will refer to the location of the value's first path segment.
+
+The optional argument `fromIndex` can be provided to specify which index into the target Path's segments to begin the search at. If not provided, the search starts at the beginning (index 0).
 
 #### `includes(value, fromIndex?): boolean;` (instance method of Path)
 
-TODO
+The `includes` method returns a boolean indicating whether `value` (string, Path, or Array of string/Path) appears in the target Path.
+
+The optional argument `fromIndex` can be provided to specify which index into the target Path's segments to begin the search at. If not provided, the search starts at the beginning (index 0).
 
 #### `replace(value, replacement): Path;` (instance method of Path)
 
-TODO
+The `replace` method returns a new `Path` object wherein the first occurrence of `value` (string, Path, or Array of string/Path) in the target Path has been replaced with `replacement` (string, Path, or Array of string/Path).
+
+Note that only the first match is replaced; to replace multiple occurrences, use `replaceAll`.
+
+If `value` is not present in the target Path, a clone of said Path is returned.
+
+> Tip: To "replace with nothing", pass an empty array as the replacement.
 
 #### `replaceAll(value, replacement): Path;` (instance method of Path)
 
-TODO
+The `replaceAll` method returns a new `Path` object wherein all occurrences of `value` (string, Path, or Array of string/Path) in the target Path have been replaced with `replacement` (string, Path, or Array of string/Path).
+
+If you want to only replace the first occurrence, use `replace` instead.
+
+If `value` is not present in the target Path, a clone of said Path is returned.
+
+> Tip: To "replace with nothing", pass an empty array as the replacement.
 
 #### `replaceLast(replacement): Path;` (instance method of Path)
 
-TODO
+The `replaceLast` method returns a copy of the target Path, but with its final segment replaced with `replacement` (string, Path, or Array of string/Path).
 
-#### `splitToSegments(inputParts): Array<string>` (static method on Path)
+This method is most commonly used to modify the final (filename) part of a path.
 
-TODO
+If the target Path has no segments, the returned Path will contain exactly the segments from `replacement`.
 
-#### `detectSeparator(input, fallback?)` (static method on Path)
+#### `Path.splitToSegments(inputParts): Array<string>` (static method on Path)
 
-TODO
+Splits one or more path strings into an array of path segments. Used internally by the Path constructor.
 
-#### `normalize(...inputs): Path` (static method on Path)
+#### `Path.detectSeparator(input, fallback)` (static method on Path)
 
-TODO
+Searches input (a string or Array of strings) for a path separator character (either forward slash or backslash), and returns it. If none is found, returns `fallback`.
 
-#### `isAbsolute(path)`: boolean (static method on Path)
+#### `Path.normalize(...inputs): Path` (static method on Path)
 
-TODO
+Concatenates the input path(s) and then resolves all non-leading `.` and `..` segments. Shortcut for `new Path(...inputs).normalize()`.
 
-#### `fromRaw(segments, separator): Path` (static method on Path)
+#### `Path.isAbsolute(path)`: boolean (static method on Path)
 
-TODO
+Return whether the `path` argument (string or Path) is an absolute path; that is, whether it starts with either `/`, `\`, or a drive letter (ie `C:`).
+
+#### `Path.fromRaw(segments, separator): Path` (static method on Path)
+
+Creates a new Path object using the provided segments and separator.
 
 ## License
 
