@@ -117,11 +117,31 @@ export class Path {
   }
 
   /**
+   * Create a new Path object using the provided segments and, optionally,
+   * separator.
+   *
+   * NOTE: this doesn't set the `segments` directly; it passes them through a
+   * filtering step first, to remove any double-slashes or etc. To set the
+   * `.segments` directly, use {@link fromRaw}.
+   */
+  static from(segments: Array<string>, separator?: string) {
+    const separatorToUse = separator || Path.detectSeparator(segments, "/");
+    const path = new Path();
+    path.segments = validateSegments(segments, separatorToUse);
+    path.separator = separatorToUse;
+    return path;
+  }
+
+  /**
    * Create a new Path object using the provided segments and separator.
+   *
+   * NOTE: this method doesn't do any sort of validation on `segments`; as such,
+   * it can be used to construct an invalid Path object. Consider using
+   * {@link from} instead.
    */
   static fromRaw(segments: Array<string>, separator: string) {
     const path = new Path();
-    path.segments = validateSegments(segments, separator);
+    path.segments = segments;
     path.separator = separator;
     return path;
   }
@@ -174,7 +194,7 @@ export class Path {
    */
   concat(...others: Array<string | Path | Array<string | Path>>): Path {
     const otherSegments = new Path(others.flat(1)).segments;
-    return Path.fromRaw(this.segments.concat(otherSegments), this.separator);
+    return Path.from(this.segments.concat(otherSegments), this.separator);
   }
 
   /**
@@ -230,13 +250,13 @@ export class Path {
 
     if (dirSegments.length === 0) {
       if (options.noLeadingDot) {
-        return Path.fromRaw(ownSegments, this.separator);
+        return Path.from(ownSegments, this.separator);
       } else {
-        return Path.fromRaw([".", ...ownSegments], this.separator);
+        return Path.from([".", ...ownSegments], this.separator);
       }
     } else {
       const dotDots = dirSegments.map((_) => "..");
-      return Path.fromRaw([...dotDots, ...ownSegments], this.separator);
+      return Path.from([...dotDots, ...ownSegments], this.separator);
     }
   }
 
@@ -392,6 +412,8 @@ export class Path {
    *
    * @param value - What should be replaced
    * @param replacement - What it should be replaced with
+   *
+   * NOTE: to remove segments, use an empty Array for `replacement`.
    */
   replace(
     value: string | Path | Array<string | Path>,
@@ -410,7 +432,7 @@ export class Path {
         ...replacement.segments,
         ...this.segments.slice(matchIndex + value.segments.length),
       ];
-      return Path.fromRaw(newSegments, this.separator);
+      return Path.from(newSegments, this.separator);
     }
   }
 
@@ -458,6 +480,6 @@ export class Path {
     segments.pop();
     segments.push(...replacement.segments);
 
-    return Path.fromRaw(segments, this.separator);
+    return Path.from(segments, this.separator);
   }
 }

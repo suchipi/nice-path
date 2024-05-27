@@ -572,3 +572,123 @@ test("Path.dirname", async () => {
     }
   `);
 });
+
+test("Path.fromRaw", async () => {
+  const p = Path.fromRaw(["one", "two", "three"], "\\");
+  expect(p).toMatchInlineSnapshot(`
+    Path {
+      "segments": [
+        "one",
+        "two",
+        "three",
+      ],
+      "separator": "\\",
+    }
+  `);
+});
+
+test("Path.fromRaw, invalid inputs", async () => {
+  const p = Path.fromRaw(["", "", "", "one", "", "two", "three"], "\\");
+  expect(p).toMatchInlineSnapshot(`
+    Path {
+      "segments": [
+        "",
+        "",
+        "",
+        "one",
+        "",
+        "two",
+        "three",
+      ],
+      "separator": "\\",
+    }
+  `);
+});
+
+test("Path.from", async () => {
+  const p = Path.from(["one", "two", "three"], "\\");
+  expect(p).toMatchInlineSnapshot(`
+    Path {
+      "segments": [
+        "one",
+        "two",
+        "three",
+      ],
+      "separator": "\\",
+    }
+  `);
+});
+
+test("Path.from, invalid inputs", async () => {
+  const p = Path.from(["", "", "", "one", "", "two", "three"], "\\");
+  expect(p).toMatchInlineSnapshot(`
+    Path {
+      "segments": [
+        "",
+        "",
+        "one",
+        "two",
+        "three",
+      ],
+      "separator": "\\",
+    }
+  `);
+
+  // NOTE: different number of allowed leading empty segments depending on separator
+  const p2 = Path.from(["", "", "", "one", "", "two", "three"], "/");
+  expect(p2).toMatchInlineSnapshot(`
+    Path {
+      "segments": [
+        "",
+        "one",
+        "two",
+        "three",
+      ],
+      "separator": "/",
+    }
+  `);
+});
+
+test("Path.from, unspecified separator", async () => {
+  // defaults to "/"
+  const p = Path.from(["one", "", "two", "three"]);
+  expect(p).toMatchInlineSnapshot(`
+    Path {
+      "segments": [
+        "one",
+        "two",
+        "three",
+      ],
+      "separator": "/",
+    }
+  `);
+
+  // uses one from input segments if possible
+  const p2 = Path.from(["", "", "", "one", "", "two\\three", "four"]);
+  expect(p2).toMatchInlineSnapshot(`
+    Path {
+      "segments": [
+        "",
+        "",
+        "one",
+        "two\\three",
+        "four",
+      ],
+      "separator": "\\",
+    }
+  `);
+
+  // ...but specified separator takes priority over that
+  const p3 = Path.from(["", "", "", "one", "", "two\\three", "four"], "/");
+  expect(p3).toMatchInlineSnapshot(`
+    Path {
+      "segments": [
+        "",
+        "one",
+        "two\\three",
+        "four",
+      ],
+      "separator": "/",
+    }
+  `);
+});
