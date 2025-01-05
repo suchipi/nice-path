@@ -2,6 +2,8 @@
 
 `nice-path` provides a class that represents a filesystem path (POSIX-style or Win32-style), which has various nice methods on it that make it easy to work with. It can be used as a replacement for the Node.js `path` builtin module, where you pass around Path objects and stringify them before use, rather than passing around strings.
 
+> `nice-path`'s code is derived from [yavascript](https://github.com/suchipi/yavascript).
+
 ## Example
 
 ```ts
@@ -191,6 +193,8 @@ The `isAbsolute` method returns whether the target Path is an absolute path; tha
 #### `clone(): Path` (instance method of Path)
 
 The `clone` method makes a second Path object containing the same segments and separator as the target.
+
+Note that although the new Path has the same segments as the target Path, it doesn't use the same Array instance.
 
 #### `relativeTo(dir, options?): Path` (instance method of Path)
 

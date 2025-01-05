@@ -220,7 +220,7 @@ export class Path {
    */
   clone(): this {
     const theClone = (this.constructor as typeof Path).fromRaw(
-      this.segments,
+      [...this.segments],
       this.separator,
     );
     return theClone as any;

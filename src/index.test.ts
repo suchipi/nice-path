@@ -692,3 +692,48 @@ test("Path.from, unspecified separator", async () => {
     }
   `);
 });
+
+test("Path.clone", async () => {
+  const p = new Path("/one/two/three/two/one/zero.help.txt");
+  const p2 = p.clone();
+
+  const result = [
+    p,
+    p2,
+    p === p2,
+    p.segments === p2.segments,
+    p.separator === p2.separator,
+  ];
+
+  expect(result).toMatchInlineSnapshot(`
+    [
+      Path {
+        "segments": [
+          "",
+          "one",
+          "two",
+          "three",
+          "two",
+          "one",
+          "zero.help.txt",
+        ],
+        "separator": "/",
+      },
+      Path {
+        "segments": [
+          "",
+          "one",
+          "two",
+          "three",
+          "two",
+          "one",
+          "zero.help.txt",
+        ],
+        "separator": "/",
+      },
+      false,
+      false,
+      true,
+    ]
+  `);
+});
