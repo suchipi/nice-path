@@ -737,3 +737,59 @@ test("Path.clone", async () => {
     ]
   `);
 });
+
+test("Path.equals", async () => {
+  const pairs = [
+    [new Path(), new Path()],
+    [new Path(""), new Path("")],
+    [new Path("/abc/d"), new Path("/abc/d")],
+    [new Path("/abc/d"), new Path("abc/d")],
+    [new Path("abc/d"), new Path("abc/d")],
+    [new Path("/123/4"), new Path("abc/d")],
+    [Path.fromRaw(["", "a", "b", "c"], "\\"), new Path("/a/b/c")],
+    [Path.fromRaw(["a", "b", "c"], "\\"), new Path("a/b/c")],
+  ];
+
+  const results = pairs.map(([a, b]) => a.equals(b));
+
+  expect(results).toMatchInlineSnapshot(`
+    [
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+    ]
+  `);
+});
+
+test("Path.hasEqualSegments", async () => {
+  const pairs = [
+    [new Path(), new Path()],
+    [new Path(""), new Path("")],
+    [new Path("/abc/d"), new Path("/abc/d")],
+    [new Path("/abc/d"), new Path("abc/d")],
+    [new Path("abc/d"), new Path("abc/d")],
+    [new Path("/123/4"), new Path("abc/d")],
+    [Path.fromRaw(["", "a", "b", "c"], "\\"), new Path("/a/b/c")],
+    [Path.fromRaw(["a", "b", "c"], "\\"), new Path("a/b/c")],
+  ];
+
+  const results = pairs.map(([a, b]) => a.hasEqualSegments(b));
+
+  expect(results).toMatchInlineSnapshot(`
+    [
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+    ]
+  `);
+});

@@ -482,4 +482,35 @@ export class Path {
 
     return Path.from(segments, this.separator);
   }
+
+  /**
+   * Return a boolean indicating whether this Path has the same separator and
+   * segments as another Path.
+   *
+   * To check only segments and not separator, use {@link Path.prototype.hasEqualSegments}.
+   */
+  equals(other: string | Path | Array<string | Path>): boolean {
+    if (!(other instanceof Path)) {
+      other = new Path(other);
+    }
+
+    return other.separator === this.separator && this.hasEqualSegments(other);
+  }
+
+  /**
+   * Return a boolean indicating whether this Path has the same segments as
+   * another Path. **Separator is not checked; use {@link Path.prototype.equals} for that.**
+   */
+  hasEqualSegments(other: string | Path | Array<string | Path>): boolean {
+    if (!(other instanceof Path)) {
+      other = new Path(other);
+    }
+
+    return (
+      this.segments.length === other.segments.length &&
+      this.segments.every((segment, index) => {
+        return segment === other.segments[index];
+      })
+    );
+  }
 }
