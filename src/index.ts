@@ -1,42 +1,45 @@
-const WIN32_DRIVE_LETTER_REGEXP = /^[A-Za-z]:$/;
-
-function isWin32DriveLetter(pathString: string) {
-  return WIN32_DRIVE_LETTER_REGEXP.test(pathString);
-}
-
-function validateSegments(
-  segments: Array<string>,
-  separator: string,
-): Array<string> {
-  return segments.filter((part, index) => {
-    // first part can be "" to represent left side of root "/"
-    // second part can be "" to support windows UNC paths
-    if (part === "" && index === 0) {
-      return true;
-    } else if (
-      part === "" &&
-      index === 1 &&
-      separator === "\\" &&
-      segments[0] === ""
-    ) {
-      return true;
-    }
-
-    return Boolean(part);
-  });
-}
-
 /** An object that represents a filesystem path. */
 export class Path {
+  /** Used by {@link _isWin32DriveLetter}. */
+  protected static _WIN32_DRIVE_LETTER_REGEXP = /^[A-Za-z]:$/;
+
+  /** Used by {@link Path.prototype.toString}. */
+  protected static _isWin32DriveLetter(pathString: string) {
+    return this._WIN32_DRIVE_LETTER_REGEXP.test(pathString);
+  }
+
+  /** Filter out empty path segments except for 1-2 leading empty segments. */
+  protected static _validateSegments(
+    segments: Array<string>,
+    separator: string,
+  ): Array<string> {
+    return segments.filter((part, index) => {
+      // first part can be "" to represent left side of root "/"
+      // second part can be "" to support windows UNC paths
+      if (part === "" && index === 0) {
+        return true;
+      } else if (
+        part === "" &&
+        index === 1 &&
+        separator === "\\" &&
+        segments[0] === ""
+      ) {
+        return true;
+      }
+
+      return Boolean(part);
+    });
+  }
+
   /** Split one or more path strings into an array of path segments. */
   static splitToSegments(inputParts: Array<string> | string): Array<string> {
     if (!Array.isArray(inputParts)) {
       inputParts = [inputParts];
     }
 
-    const separator = Path.detectSeparator(inputParts, "/");
+    const separator = (this as typeof Path).detectSeparator(inputParts, "/");
 
-    return validateSegments(
+    return this._validateSegments(
       inputParts.map((part) => part.split(/(?:\/|\\)/g)).flat(1),
       separator,
     );
@@ -71,10 +74,8 @@ export class Path {
    * Concatenates the input path(s) and then resolves all non-leading `.` and
    * `..` segments.
    */
-  static normalize(
-    ...inputs: Array<string | Path | Array<string | Path>>
-  ): Path {
-    return new Path(...inputs).normalize();
+  static normalize(...inputs: Array<string | Path | Array<string | Path>>) {
+    return new (this as typeof Path)(...inputs).normalize();
   }
 
   /**
@@ -82,10 +83,10 @@ export class Path {
    * starts with either `/`, `\`, or a drive letter (ie `C:`).
    */
   static isAbsolute(path: string | Path): boolean {
-    if (path instanceof Path) {
+    if ((this.constructor as typeof Path).isPath(path)) {
       return path.isAbsolute();
     } else {
-      return new Path(path).isAbsolute();
+      return new (this as typeof Path)(path).isAbsolute();
     }
   }
 
@@ -105,6 +106,8 @@ export class Path {
    */
   separator: string;
 
+  protected __is_Path!: true;
+
   /** Create a new Path object using the provided input(s). */
   constructor(...inputs: Array<string | Path | Array<string | Path>>) {
     const parts = inputs
@@ -112,8 +115,17 @@ export class Path {
       .map((part) => (typeof part === "string" ? part : part.segments))
       .flat(1);
 
-    this.segments = Path.splitToSegments(parts);
-    this.separator = Path.detectSeparator(parts, "/");
+    this.segments = (this.constructor as typeof Path).splitToSegments(parts);
+    this.separator = (this.constructor as typeof Path).detectSeparator(
+      parts,
+      "/",
+    );
+
+    Object.defineProperty(this, "__is_Path", {
+      configurable: true,
+      enumerable: false,
+      value: true,
+    });
   }
 
   /**
@@ -124,10 +136,11 @@ export class Path {
    * filtering step first, to remove any double-slashes or etc. To set the
    * `.segments` directly, use {@link fromRaw}.
    */
-  static from(segments: Array<string>, separator?: string) {
-    const separatorToUse = separator || Path.detectSeparator(segments, "/");
-    const path = new Path();
-    path.segments = validateSegments(segments, separatorToUse);
+  static from(segments: Array<string>, separator?: string): Path {
+    const separatorToUse =
+      separator || (this as typeof Path).detectSeparator(segments, "/");
+    const path = new (this as typeof Path)();
+    path.segments = this._validateSegments(segments, separatorToUse);
     path.separator = separatorToUse;
     return path;
   }
@@ -139,8 +152,8 @@ export class Path {
    * it can be used to construct an invalid Path object. Consider using
    * {@link from} instead.
    */
-  static fromRaw(segments: Array<string>, separator: string) {
-    const path = new Path();
+  static fromRaw(segments: Array<string>, separator: string): Path {
+    const path = new (this as typeof Path)();
     path.segments = segments;
     path.separator = separator;
     return path;
@@ -149,7 +162,7 @@ export class Path {
   /**
    * Resolve all non-leading `.` and `..` segments in this path.
    */
-  normalize(): Path {
+  normalize(): this {
     // we clone this cause we're gonna mutate it
     const segments = [...this.segments];
 
@@ -183,7 +196,10 @@ export class Path {
       }
     }
 
-    return Path.fromRaw(newSegments, this.separator);
+    return (this.constructor as typeof Path).fromRaw(
+      newSegments,
+      this.separator,
+    ) as this;
   }
 
   /**
@@ -192,9 +208,13 @@ export class Path {
    *
    * The returned path will use this path's separator.
    */
-  concat(...others: Array<string | Path | Array<string | Path>>): Path {
-    const otherSegments = new Path(others.flat(1)).segments;
-    return Path.from(this.segments.concat(otherSegments), this.separator);
+  concat(...others: Array<string | Path | Array<string | Path>>): this {
+    const otherSegments = new (this.constructor as typeof Path)(others.flat(1))
+      .segments;
+    return (this.constructor as typeof Path).from(
+      this.segments.concat(otherSegments),
+      this.separator,
+    ) as this;
   }
 
   /**
@@ -227,6 +247,21 @@ export class Path {
   }
 
   /**
+   * Returns a boolean indicating whether `other` is a Path instance.
+   *
+   * Works cross-context/realm/iframe/etc.
+   *
+   * @param other - Any value
+   */
+  static isPath(other: unknown): other is Path {
+    return (
+      typeof other === "object" &&
+      other !== null &&
+      (other as Path).__is_Path === true
+    );
+  }
+
+  /**
    * Express this path relative to `dir`.
    *
    * @param dir - The directory to create a new path relative to.
@@ -235,9 +270,9 @@ export class Path {
   relativeTo(
     dir: Path | string,
     options: { noLeadingDot?: boolean } = {},
-  ): Path {
-    if (!(dir instanceof Path)) {
-      dir = new Path(dir);
+  ): this {
+    if (!(this.constructor as typeof Path).isPath(dir)) {
+      dir = new (this.constructor as typeof Path)(dir);
     }
 
     const ownSegments = [...this.segments];
@@ -250,13 +285,22 @@ export class Path {
 
     if (dirSegments.length === 0) {
       if (options.noLeadingDot) {
-        return Path.from(ownSegments, this.separator);
+        return (this.constructor as typeof Path).from(
+          ownSegments,
+          this.separator,
+        ) as this;
       } else {
-        return Path.from([".", ...ownSegments], this.separator);
+        return (this.constructor as typeof Path).from(
+          [".", ...ownSegments],
+          this.separator,
+        ) as this;
       }
     } else {
       const dotDots = dirSegments.map((_) => "..");
-      return Path.from([...dotDots, ...ownSegments], this.separator);
+      return (this.constructor as typeof Path).from(
+        [...dotDots, ...ownSegments],
+        this.separator,
+      ) as this;
     }
   }
 
@@ -268,7 +312,7 @@ export class Path {
     if (result == "") {
       return "/";
     } else {
-      if (isWin32DriveLetter(result)) {
+      if ((this.constructor as typeof Path)._isWin32DriveLetter(result)) {
         return result + this.separator;
       } else {
         return result;
@@ -308,7 +352,7 @@ export class Path {
    * Return a new Path containing all of the path segments in this one except
    * for the last one; ie. the path to the directory that contains this path.
    */
-  dirname(): Path {
+  dirname(): this {
     return this.replaceLast([]);
   }
 
@@ -329,7 +373,7 @@ export class Path {
    * Path B does *not* start with Path A, because `".config" !== ".config2"`.
    */
   startsWith(value: string | Path | Array<string | Path>): boolean {
-    value = new Path(value);
+    value = new (this.constructor as typeof Path)(value);
 
     return value.segments.every(
       (segment, index) => this.segments[index] === segment,
@@ -353,7 +397,7 @@ export class Path {
    * Path A does *not* end with Path B, because `"1user" !== "user"`.
    */
   endsWith(value: string | Path | Array<string | Path>): boolean {
-    value = new Path(value);
+    value = new (this.constructor as typeof Path)(value);
 
     const valueSegmentsReversed = [...value.segments].reverse();
     const ownSegmentsReversed = [...this.segments].reverse();
@@ -374,7 +418,7 @@ export class Path {
     value: string | Path | Array<string | Path>,
     fromIndex: number = 0,
   ): number {
-    value = new Path(value);
+    value = new (this.constructor as typeof Path)(value);
 
     const ownSegmentsLength = this.segments.length;
     for (let i = fromIndex; i < ownSegmentsLength; i++) {
@@ -418,9 +462,9 @@ export class Path {
   replace(
     value: string | Path | Array<string | Path>,
     replacement: string | Path | Array<string | Path>,
-  ): Path {
-    value = new Path(value);
-    replacement = new Path(replacement);
+  ): this {
+    value = new (this.constructor as typeof Path)(value);
+    replacement = new (this.constructor as typeof Path)(replacement);
 
     const matchIndex = this.indexOf(value);
 
@@ -432,7 +476,10 @@ export class Path {
         ...replacement.segments,
         ...this.segments.slice(matchIndex + value.segments.length),
       ];
-      return Path.from(newSegments, this.separator);
+      return (this.constructor as typeof Path).from(
+        newSegments,
+        this.separator,
+      ) as this;
     }
   }
 
@@ -447,8 +494,8 @@ export class Path {
   replaceAll(
     value: string | Path | Array<string | Path>,
     replacement: string | Path | Array<string | Path>,
-  ): Path {
-    replacement = new Path(replacement);
+  ): this {
+    replacement = new (this.constructor as typeof Path)(replacement);
 
     let searchIndex = 0;
 
@@ -465,7 +512,7 @@ export class Path {
       }
     }
 
-    return currentPath;
+    return currentPath as this;
   }
 
   /**
@@ -473,14 +520,17 @@ export class Path {
    *
    * @param replacement - The new final segment(s) for the returned Path
    */
-  replaceLast(replacement: string | Path | Array<string | Path>): Path {
-    replacement = new Path(replacement);
+  replaceLast(replacement: string | Path | Array<string | Path>): this {
+    replacement = new (this.constructor as typeof Path)(replacement);
 
     const segments = [...this.segments];
     segments.pop();
     segments.push(...replacement.segments);
 
-    return Path.from(segments, this.separator);
+    return (this.constructor as typeof Path).from(
+      segments,
+      this.separator,
+    ) as this;
   }
 
   /**
@@ -490,8 +540,8 @@ export class Path {
    * To check only segments and not separator, use {@link Path.prototype.hasEqualSegments}.
    */
   equals(other: string | Path | Array<string | Path>): boolean {
-    if (!(other instanceof Path)) {
-      other = new Path(other);
+    if (!(this.constructor as typeof Path).isPath(other)) {
+      other = new (this.constructor as typeof Path)(other);
     }
 
     return other.separator === this.separator && this.hasEqualSegments(other);
@@ -502,8 +552,8 @@ export class Path {
    * another Path. **Separator is not checked; use {@link Path.prototype.equals} for that.**
    */
   hasEqualSegments(other: string | Path | Array<string | Path>): boolean {
-    if (!(other instanceof Path)) {
-      other = new Path(other);
+    if (!(this.constructor as typeof Path).isPath(other)) {
+      other = new (this.constructor as typeof Path)(other);
     }
 
     return (

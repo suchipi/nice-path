@@ -793,3 +793,34 @@ test("Path.hasEqualSegments", async () => {
     ]
   `);
 });
+
+test("when subclassed, methods return subclass instances", () => {
+  class MyPath extends Path {}
+
+  expect(MyPath.normalize("a")).toBeInstanceOf(MyPath);
+  expect(MyPath.from(["a"])).toBeInstanceOf(MyPath);
+  expect(MyPath.from(["a"], "\\")).toBeInstanceOf(MyPath);
+  expect(MyPath.fromRaw(["a"], "/")).toBeInstanceOf(MyPath);
+
+  const myPath = new MyPath("a/b/c");
+
+  expect(myPath.normalize()).toBeInstanceOf(MyPath);
+  expect(myPath.concat("b")).toBeInstanceOf(MyPath);
+  expect(myPath.clone()).toBeInstanceOf(MyPath);
+  expect(myPath.relativeTo("/")).toBeInstanceOf(MyPath);
+  expect(myPath.dirname()).toBeInstanceOf(MyPath);
+  expect(myPath.replace("a", "d")).toBeInstanceOf(MyPath);
+  expect(myPath.replaceAll("a", "d")).toBeInstanceOf(MyPath);
+  expect(myPath.replaceLast("q")).toBeInstanceOf(MyPath);
+});
+
+test("when subclassed, Path.isPath returns true for the subclass", () => {
+  class MyPath extends Path {}
+  const myPath = new MyPath("a");
+
+  expect(Path.isPath(myPath)).toBe(true);
+  expect(MyPath.isPath(myPath)).toBe(true);
+  // NOTE: The below behavior may be unexpected, but is correct. Consider adding
+  // eg. "MyPath.isMyPath" to your own subclass implementation.
+  expect(MyPath.isPath(new Path("a"))).toBe(true);
+});
