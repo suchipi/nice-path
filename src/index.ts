@@ -83,7 +83,7 @@ export class Path {
    * starts with either `/`, `\`, or a drive letter (ie `C:`).
    */
   static isAbsolute(path: string | Path): boolean {
-    if ((this.constructor as typeof Path).isPath(path)) {
+    if (this.isPath(path)) {
       return path.isAbsolute();
     } else {
       return new (this as typeof Path)(path).isAbsolute();

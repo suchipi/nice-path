@@ -824,3 +824,13 @@ test("when subclassed, Path.isPath returns true for the subclass", () => {
   // eg. "MyPath.isMyPath" to your own subclass implementation.
   expect(MyPath.isPath(new Path("a"))).toBe(true);
 });
+
+test("statics work", () => {
+  expect(Path.splitToSegments("a/b/c")).toEqual(["a", "b", "c"]);
+  expect(Path.detectSeparator("dfs\\fds", null)).toBe("\\");
+  expect(Path.normalize("/tmp/somewhere/../yeah").toString()).toBe("/tmp/yeah");
+  expect(Path.isAbsolute("/yeah")).toBe(true);
+  expect(Path.from(["a/b", "c"], "/").toString()).toBe("a/b/c");
+  expect(Path.fromRaw(["a/b", "c"], "/").segments[0]).toBe("a/b");
+  expect(Path.isPath(new Path("/"))).toBe(true);
+});
