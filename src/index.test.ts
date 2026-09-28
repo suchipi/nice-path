@@ -754,9 +754,14 @@ test("Path.clone", async () => {
   `);
 });
 
+function makeInvalidEmptyPath() {
+  const path = new Path("");
+  path.segments = [];
+  return path;
+}
+
 test("Path.equals", async () => {
   const pairs = [
-    [new Path(), new Path()],
     [new Path(""), new Path("")],
     [new Path("/abc/d"), new Path("/abc/d")],
     [new Path("/abc/d"), new Path("abc/d")],
@@ -764,6 +769,11 @@ test("Path.equals", async () => {
     [new Path("/123/4"), new Path("abc/d")],
     [Path.fromRaw(["", "a", "b", "c"], "\\"), new Path("/a/b/c")],
     [Path.fromRaw(["a", "b", "c"], "\\"), new Path("a/b/c")],
+    [
+      // Note: equals doesn't blow up if the Path is an invalid zero-segment Path object
+      makeInvalidEmptyPath(),
+      makeInvalidEmptyPath(),
+    ],
   ];
 
   const results = pairs.map(([a, b]) => a.equals(b));
@@ -772,19 +782,18 @@ test("Path.equals", async () => {
     [
       true,
       true,
-      true,
       false,
       true,
       false,
       false,
       false,
+      true,
     ]
   `);
 });
 
 test("Path.hasEqualSegments", async () => {
   const pairs = [
-    [new Path(), new Path()],
     [new Path(""), new Path("")],
     [new Path("/abc/d"), new Path("/abc/d")],
     [new Path("/abc/d"), new Path("abc/d")],
@@ -792,6 +801,11 @@ test("Path.hasEqualSegments", async () => {
     [new Path("/123/4"), new Path("abc/d")],
     [Path.fromRaw(["", "a", "b", "c"], "\\"), new Path("/a/b/c")],
     [Path.fromRaw(["a", "b", "c"], "\\"), new Path("a/b/c")],
+    [
+      // Note: hasEqualSegments doesn't blow up if the Path is an invalid zero-segment Path object
+      makeInvalidEmptyPath(),
+      makeInvalidEmptyPath(),
+    ],
   ];
 
   const results = pairs.map(([a, b]) => a.hasEqualSegments(b));
@@ -800,10 +814,10 @@ test("Path.hasEqualSegments", async () => {
     [
       true,
       true,
-      true,
       false,
       true,
       false,
+      true,
       true,
       true,
     ]
@@ -849,4 +863,268 @@ test("statics work", () => {
   expect(Path.from(["a/b", "c"], "/").toString()).toBe("a/b/c");
   expect(Path.fromRaw(["a/b", "c"], "/").segments[0]).toBe("a/b");
   expect(Path.isPath(new Path("/"))).toBe(true);
+});
+
+test("Path.relativeTo - path equal to dir throws", () => {
+  expect(() => {
+    new Path("/a/b").relativeTo("/a/b").toString();
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.RelativeToSelfError: Cannot express the value of a path relative to itself]`,
+  );
+
+  expect(() => {
+    new Path("/a/b").relativeTo("/a/b", { noLeadingDot: true }).toString();
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.RelativeToSelfError: Cannot express the value of a path relative to itself]`,
+  );
+
+  expect(() => {
+    new Path("a").relativeTo("a").toString();
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.RelativeToSelfError: Cannot express the value of a path relative to itself]`,
+  );
+});
+
+test("Path.replaceAll - empty replacement removes segments", () => {
+  expect([
+    new Path("a/b").replaceAll("a", []).toString(),
+    new Path("x/a/a/y").replaceAll("a", []).toString(),
+  ]).toEqual(["b", "x/y"]);
+});
+
+test("Path.replaceAll - replacement longer than the value", () => {
+  expect([
+    new Path("a/a/a").replaceAll("a", "b/c").toString(),
+    new Path("a/x/a").replaceAll("a", "a/b").toString(),
+  ]).toEqual(["b/c/b/c/b/c", "a/b/x/a/b"]);
+});
+
+test("Path.replaceAll - resulting zero-segment Path is disallowed (throws)", () => {
+  expect(() => {
+    new Path("a/a/a").replaceAll("a", []).toString();
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: 'replaceAll' is attempting to create a Path with zero segments, which is invalid]`,
+  );
+});
+
+test("Path.replace - empty replacement removes segments", () => {
+  expect([
+    new Path("a/b").replace("a", []).toString(),
+    new Path("x/a/a/y").replace("a", []).toString(),
+  ]).toEqual(["b", "x/a/y"]);
+});
+
+test("Path.replace - resulting zero-segment Path is disallowed (throws)", () => {
+  expect(() => {
+    new Path("a").replace("a", []);
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: 'replace' is attempting to create a Path with zero segments, which is invalid]`,
+  );
+});
+
+test("Path.normalize - fully-cancelling paths throw", () => {
+  expect(() => {
+    Path.normalize("a/..");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: 'normalize' is attempting to create a Path with zero segments, which is invalid]`,
+  );
+
+  expect(() => {
+    Path.normalize("a/b/../..");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: 'normalize' is attempting to create a Path with zero segments, which is invalid]`,
+  );
+});
+
+// Intentionally different from POSIX here
+test("Path.normalize - Attempting to move outside of fs root with .. throws", () => {
+  expect(() => {
+    Path.normalize("/../x");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.NormalizeGoingOutsideRootError: 'normalize' is attempting to resolve '..' above the root of an absolute path, which isn't supported]`,
+  );
+
+  expect(() => {
+    Path.normalize("/a/../../b");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.NormalizeGoingOutsideRootError: 'normalize' is attempting to resolve '..' above the root of an absolute path, which isn't supported]`,
+  );
+});
+
+test("Path.normalize - Attempting to move outside of drive root with .. throws", () => {
+  expect(() => {
+    Path.normalize(String.raw`C:\..\x`);
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.NormalizeGoingOutsideRootError: 'normalize' is attempting to resolve '..' above the root of an absolute path, which isn't supported]`,
+  );
+
+  expect(() => {
+    Path.normalize(String.raw`C:\a\..\..\b`);
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.NormalizeGoingOutsideRootError: 'normalize' is attempting to resolve '..' above the root of an absolute path, which isn't supported]`,
+  );
+});
+
+test("Path.normalize - win32 drive path", () => {
+  expect(Path.normalize(String.raw`C:\a\..\b`).toString()).toBe(
+    String.raw`C:\b`,
+  );
+  expect(Path.normalize(String.raw`C:\a\..`).toString()).toBe("C:\\");
+});
+
+test("Path.normalize - . right after root", () => {
+  expect(Path.normalize("/./x").toString()).toBe("/x");
+  expect(Path.normalize(String.raw`C:\.\x`).toString()).toBe(String.raw`C:\x`);
+});
+
+test("Path.normalize - UNC path", () => {
+  expect(Path.normalize(String.raw`\\server\share\x\..`).toString()).toBe(
+    String.raw`\\server\share`,
+  );
+});
+
+test("Path - using dirname to obtain an empty path throws", () => {
+  expect(() => {
+    new Path("a.txt").dirname();
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: 'replaceLast' is attempting to create a Path with zero segments, which is invalid]`,
+  );
+
+  expect(() => {
+    new Path(".").dirname();
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: 'replaceLast' is attempting to create a Path with zero segments, which is invalid]`,
+  );
+});
+
+test("Path.isAbsolute", () => {
+  const inputs = [
+    "/a",
+    String.raw`\\server\share`,
+    String.raw`C:\a`,
+    "C:\\",
+    "C:",
+    "c:/a",
+    "C:a",
+    "a:b/c",
+    "a/b",
+  ];
+
+  expect(inputs.map((input) => Path.isAbsolute(input))).toEqual([
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+  ]);
+});
+
+test("Path.normalize - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().normalize();
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot normalize a Path with zero segments]`,
+  );
+});
+
+test("Path.concat - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().concat("b");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot concat onto a Path with zero segments]`,
+  );
+});
+
+test("Path.isAbsolute - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().isAbsolute();
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot determine whether a Path with zero segments is absolute]`,
+  );
+});
+
+test("Path.clone - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().clone();
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot clone a Path with zero segments]`,
+  );
+});
+
+test("Path.relativeTo - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().relativeTo("/a/b");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot express a Path with zero segments relative to another path]`,
+  );
+});
+
+test("Path.startsWith - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().startsWith("a");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot check what a Path with zero segments starts with]`,
+  );
+});
+
+test("Path.endsWith - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().endsWith("a");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot check what a Path with zero segments ends with]`,
+  );
+});
+
+test("Path.indexOf - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().indexOf("a");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot search within a Path with zero segments]`,
+  );
+});
+
+test("Path.includes - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().includes("a");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot search within a Path with zero segments]`,
+  );
+});
+
+test("Path.replace - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().replace("a", "b");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot replace segments within a Path with zero segments]`,
+  );
+});
+
+test("Path.replaceAll - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().replaceAll("a", "b");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot replace segments within a Path with zero segments]`,
+  );
+});
+
+test("Path.replaceLast - called on a zero-segment Path throws", () => {
+  expect(() => {
+    makeInvalidEmptyPath().replaceLast("b");
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot replace the last segment of a Path with zero segments]`,
+  );
+});
+
+test("Path.relativeTo - dir with zero segments throws", () => {
+  const emptyDir = makeInvalidEmptyPath();
+
+  expect(() => {
+    new Path("/x/y").relativeTo(emptyDir);
+  }).toThrowErrorMatchingInlineSnapshot(
+    `[PathErrors.ZeroSegmentsError: Cannot express a path relative to a Path with zero segments]`,
+  );
 });

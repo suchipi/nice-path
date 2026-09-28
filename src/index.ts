@@ -1,9 +1,40 @@
+import * as PathErrors from "./errors";
+
+export { PathErrors };
+
+function arrayHasHoles(array: Array<unknown>): boolean {
+  for (let i = 0; i < array.length; i++) {
+    if (!(i in array)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function throwIfSegmentsArrayHasHoles(
+  array: Array<string>,
+  message = "Unexpected hole(s) in segments Array",
+) {
+  if (arrayHasHoles(array)) {
+    throw new PathErrors.HolesInSegmentsError(message);
+  }
+}
+
+function throwIfSegmentsArrayIsEmpty(
+  array: Array<string>,
+  message = "Cannot create a Path with zero segments",
+) {
+  if (array.length === 0) {
+    throw new PathErrors.ZeroSegmentsError(message);
+  }
+}
+
 /** An object that represents a filesystem path. */
 export class Path {
   /** Used by {@link _isWin32DriveLetter}. */
   protected static _WIN32_DRIVE_LETTER_REGEXP = /^[A-Za-z]:$/;
 
-  /** Used by {@link Path.prototype.toString}. */
+  /** Used by {@link Path.prototype.toString} and {@link Path.prototype.isAbsolute}. */
   protected static _isWin32DriveLetter(pathString: string) {
     return this._WIN32_DRIVE_LETTER_REGEXP.test(pathString);
   }
@@ -13,6 +44,8 @@ export class Path {
     segments: Array<string>,
     separator: string,
   ): Array<string> {
+    throwIfSegmentsArrayHasHoles(segments);
+
     return segments.filter((part, index) => {
       // first part can be "" to represent left side of root "/"
       // second part can be "" to support windows UNC paths
@@ -96,36 +129,53 @@ export class Path {
    * For `/tmp/foo.txt`, it'd be `["", "tmp", "foo.txt"]`.
    *
    * For `C:\something\somewhere.txt`, it'd be `["C:", "something", "somewhere.txt"]`.
+   *
+   * It is invalid for a Path to have zero segments.
    */
-  segments: Array<string>;
+  segments!: Array<string>;
 
   /**
    * The path separator that should be used to turn this path into a string.
    *
    * Will be either `/` or `\`.
    */
-  separator: string;
+  separator!: string;
 
   protected __is_Path!: true;
 
-  /** Create a new Path object using the provided input(s). */
-  constructor(...inputs: Array<string | Path | Array<string | Path>>) {
+  /** Same as constructor but without the zero-length or holes checks */
+  protected static _internalConstructorAllowInvalid(
+    inputs: Array<string | Path | Array<string | Path>>,
+    target: Path = Object.create((this as typeof Path).prototype),
+  ) {
     const parts = inputs
       .flat(1)
       .map((part) => (typeof part === "string" ? part : part.segments))
       .flat(1);
 
-    this.segments = (this.constructor as typeof Path).splitToSegments(parts);
-    this.separator = (this.constructor as typeof Path).detectSeparator(
-      parts,
-      "/",
-    );
+    target.segments = (this as typeof Path).splitToSegments(parts);
+    target.separator = (this as typeof Path).detectSeparator(parts, "/");
 
-    Object.defineProperty(this, "__is_Path", {
+    Object.defineProperty(target, "__is_Path", {
       configurable: true,
       enumerable: false,
       value: true,
     });
+
+    return target;
+  }
+
+  /** Create a new Path object using the provided input(s). */
+  constructor(...inputs: Array<string | Path | Array<string | Path>>) {
+    (this.constructor as typeof Path)._internalConstructorAllowInvalid(
+      inputs,
+      this,
+    );
+
+    // @ts-ignore use-before-assign (assigned in _internalConstructorAllowInvalid)
+    throwIfSegmentsArrayIsEmpty(this.segments);
+    // @ts-ignore use-before-assign (assigned in _internalConstructorAllowInvalid)
+    throwIfSegmentsArrayHasHoles(this.segments);
   }
 
   /**
@@ -137,10 +187,12 @@ export class Path {
    * `.segments` directly, use {@link fromRaw}.
    */
   static from(segments: Array<string>, separator?: string): Path {
+    throwIfSegmentsArrayHasHoles(segments);
     const separatorToUse =
       separator || (this as typeof Path).detectSeparator(segments, "/");
-    const path = new (this as typeof Path)();
+    const path = (this as typeof Path)._internalConstructorAllowInvalid([]);
     path.segments = this._validateSegments(segments, separatorToUse);
+    throwIfSegmentsArrayIsEmpty(path.segments);
     path.separator = separatorToUse;
     return path;
   }
@@ -148,12 +200,15 @@ export class Path {
   /**
    * Create a new Path object using the provided segments and separator.
    *
-   * NOTE: this method doesn't do any sort of validation on `segments`; as such,
+   * NOTE: this method doesn't do full validation on `segments`; as such,
    * it can be used to construct an invalid Path object. Consider using
    * {@link from} instead.
    */
   static fromRaw(segments: Array<string>, separator: string): Path {
-    const path = new (this as typeof Path)();
+    throwIfSegmentsArrayIsEmpty(segments);
+    throwIfSegmentsArrayHasHoles(segments);
+
+    const path = (this as typeof Path)._internalConstructorAllowInvalid([]);
     path.segments = segments;
     path.separator = separator;
     return path;
@@ -163,45 +218,60 @@ export class Path {
    * Resolve all non-leading `.` and `..` segments in this path.
    */
   normalize(): this {
-    // we clone this cause we're gonna mutate it
-    const segments = [...this.segments];
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot normalize a Path with zero segments",
+    );
 
-    const newSegments: Array<string> = [];
-    function isNewSegmentsEmptyExcludingDots() {
-      return (
-        newSegments.filter((segment) => segment !== "." && segment !== "..")
-          .length === 0
-      );
-    }
+    const segments = this.segments;
+    const thisIsAbsolute = this.isAbsolute();
 
-    let currentSegment: string | undefined;
-    while (segments.length > 0) {
-      currentSegment = segments.shift();
+    const bodyStart = thisIsAbsolute
+      ? segments[1] === ""
+        ? /* UNC path */ 2
+        : /* fs root or drive letter */ 1
+      : /* relative/unqualified */ 0;
 
-      switch (currentSegment) {
-        case ".": {
-          if (isNewSegmentsEmptyExcludingDots()) {
-            newSegments.push(currentSegment);
-          }
-          break;
+    const newSegments = segments.slice(0, bodyStart);
+
+    for (let i = bodyStart; i < segments.length; i++) {
+      const segment = segments[i];
+      if (segment === "") continue;
+
+      if (segment === ".") {
+        if (!thisIsAbsolute && newSegments.length === bodyStart) {
+          newSegments.push(".");
         }
-        case "..": {
-          if (isNewSegmentsEmptyExcludingDots()) {
-            newSegments.push(currentSegment);
-          } else {
-            newSegments.pop();
-          }
-
-          break;
-        }
-        default: {
-          if (currentSegment != null) {
-            newSegments.push(currentSegment);
-          }
-          break;
-        }
+        continue;
       }
+
+      if (segment === "..") {
+        const last =
+          newSegments.length > bodyStart
+            ? newSegments[newSegments.length - 1]
+            : undefined;
+        if (last === ".") {
+          newSegments.pop();
+          newSegments.push("..");
+        } else if (last != null && last !== "..") {
+          newSegments.pop();
+        } else if (!thisIsAbsolute) {
+          newSegments.push("..");
+        } else {
+          throw new PathErrors.NormalizeGoingOutsideRootError(
+            "'normalize' is attempting to resolve '..' above the root of an absolute path, which isn't supported",
+          );
+        }
+        continue;
+      }
+
+      newSegments.push(segment);
     }
+
+    throwIfSegmentsArrayIsEmpty(
+      newSegments,
+      "'normalize' is attempting to create a Path with zero segments, which is invalid",
+    );
 
     return (this.constructor as typeof Path).fromRaw(
       newSegments,
@@ -216,8 +286,14 @@ export class Path {
    * The returned path will use this path's separator.
    */
   concat(...others: Array<string | Path | Array<string | Path>>): this {
-    const otherSegments = new (this.constructor as typeof Path)(others.flat(1))
-      .segments;
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot concat onto a Path with zero segments",
+    );
+
+    const otherSegments = (
+      this.constructor as typeof Path
+    )._internalConstructorAllowInvalid(others.flat(1)).segments;
     return (this.constructor as typeof Path).from(
       this.segments.concat(otherSegments),
       this.separator,
@@ -229,14 +305,20 @@ export class Path {
    * either `/`, `\`, or a drive letter (ie `C:`).
    */
   isAbsolute(): boolean {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot determine whether a Path with zero segments is absolute",
+    );
+
     const firstPart = this.segments[0];
 
     // empty first component indicates that path starts with leading slash.
     // could be unix fs root, or windows unc path
     if (firstPart === "") return true;
 
-    // windows drive
-    if (/^[A-Za-z]:/.test(firstPart)) return true;
+    if ((this.constructor as typeof Path)._isWin32DriveLetter(firstPart)) {
+      return true;
+    }
 
     return false;
   }
@@ -246,6 +328,11 @@ export class Path {
    * this one.
    */
   clone(): this {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot clone a Path with zero segments",
+    );
+
     const theClone = (this.constructor as typeof Path).fromRaw(
       [...this.segments],
       this.separator,
@@ -278,14 +365,34 @@ export class Path {
     dir: Path | string,
     options: { noLeadingDot?: boolean } = {},
   ): this {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot express a Path with zero segments relative to another path",
+    );
+
     if (!(this.constructor as typeof Path).isPath(dir)) {
       dir = new (this.constructor as typeof Path)(dir);
+    }
+
+    throwIfSegmentsArrayIsEmpty(
+      dir.segments,
+      "Cannot express a path relative to a Path with zero segments",
+    );
+
+    if (this.hasEqualSegments(dir)) {
+      throw new PathErrors.RelativeToSelfError(
+        "Cannot express the value of a path relative to itself",
+      );
     }
 
     const ownSegments = [...this.segments];
     const dirSegments = [...dir.segments];
 
-    while (ownSegments[0] === dirSegments[0]) {
+    while (
+      ownSegments.length > 0 &&
+      dirSegments.length > 0 &&
+      ownSegments[0] === dirSegments[0]
+    ) {
       ownSegments.shift();
       dirSegments.shift();
     }
@@ -315,25 +422,35 @@ export class Path {
    * Turn this path into a string by joining its segments using its separator.
    */
   toString(): string {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Invalid Path with zero segments cannot be stringified",
+    );
+    throwIfSegmentsArrayHasHoles(
+      this.segments,
+      "Invalid Path with hole(s) in segments Array cannot be stringified",
+    );
+
     let result = this.segments.join(this.separator);
-    if (result == "") {
-      return "/";
+    if ((this.constructor as typeof Path)._isWin32DriveLetter(result)) {
+      return result + this.separator;
     } else {
-      if ((this.constructor as typeof Path)._isWin32DriveLetter(result)) {
-        return result + this.separator;
-      } else {
-        return result;
-      }
+      return result;
     }
   }
 
   /**
-   * Return the final path segment of this path. If this path has no path
-   * segments, the empty string is returned.
+   * Return the final path segment of this path.
    */
   basename(): string {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot obtain basename from a Path with zero segments",
+    );
+    throwIfSegmentsArrayHasHoles(this.segments);
+
     const last = this.segments[this.segments.length - 1];
-    return last || "";
+    return last;
   }
 
   /**
@@ -341,6 +458,12 @@ export class Path {
    * get a compound extension like ".d.ts" instead of ".ts".
    */
   extname(options: { full?: boolean } = {}): string {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot obtain extname from a Path with zero segments",
+    );
+    throwIfSegmentsArrayHasHoles(this.segments);
+
     const filename = this.basename();
     const parts = filename.split(".");
 
@@ -360,6 +483,12 @@ export class Path {
    * for the last one; ie. the path to the directory that contains this path.
    */
   dirname(): this {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot obtain dirname from a Path with zero segments",
+    );
+    throwIfSegmentsArrayHasHoles(this.segments);
+
     return this.replaceLast([]);
   }
 
@@ -380,6 +509,11 @@ export class Path {
    * Path B does *not* start with Path A, because `".config" !== ".config2"`.
    */
   startsWith(value: string | Path | Array<string | Path>): boolean {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot check what a Path with zero segments starts with",
+    );
+
     value = new (this.constructor as typeof Path)(value);
 
     return value.segments.every(
@@ -404,6 +538,11 @@ export class Path {
    * Path A does *not* end with Path B, because `"1user" !== "user"`.
    */
   endsWith(value: string | Path | Array<string | Path>): boolean {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot check what a Path with zero segments ends with",
+    );
+
     value = new (this.constructor as typeof Path)(value);
 
     const valueSegmentsReversed = [...value.segments].reverse();
@@ -425,6 +564,11 @@ export class Path {
     value: string | Path | Array<string | Path>,
     fromIndex: number = 0,
   ): number {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot search within a Path with zero segments",
+    );
+
     value = new (this.constructor as typeof Path)(value);
 
     const ownSegmentsLength = this.segments.length;
@@ -470,8 +614,15 @@ export class Path {
     value: string | Path | Array<string | Path>,
     replacement: string | Path | Array<string | Path>,
   ): this {
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot replace segments within a Path with zero segments",
+    );
+
     value = new (this.constructor as typeof Path)(value);
-    replacement = new (this.constructor as typeof Path)(replacement);
+    replacement = (
+      this.constructor as typeof Path
+    )._internalConstructorAllowInvalid([replacement]);
 
     const matchIndex = this.indexOf(value);
 
@@ -483,6 +634,10 @@ export class Path {
         ...replacement.segments,
         ...this.segments.slice(matchIndex + value.segments.length),
       ];
+      throwIfSegmentsArrayIsEmpty(
+        newSegments,
+        "'replace' is attempting to create a Path with zero segments, which is invalid",
+      );
       return (this.constructor as typeof Path).from(
         newSegments,
         this.separator,
@@ -502,24 +657,46 @@ export class Path {
     value: string | Path | Array<string | Path>,
     replacement: string | Path | Array<string | Path>,
   ): this {
-    replacement = new (this.constructor as typeof Path)(replacement);
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot replace segments within a Path with zero segments",
+    );
 
-    let searchIndex = 0;
+    const target = (
+      this.constructor as typeof Path
+    )._internalConstructorAllowInvalid([value]).segments;
+    const replacementSegments = (
+      this.constructor as typeof Path
+    )._internalConstructorAllowInvalid([replacement]).segments;
+    const ownSegments = this.segments;
+    const resultingSegments: Array<string> = [];
 
-    let currentPath: Path = this;
-
-    const ownLength = this.segments.length;
-    while (searchIndex < ownLength) {
-      const matchingIndex = this.indexOf(value, searchIndex);
-      if (matchingIndex === -1) {
-        break;
+    let index = 0;
+    while (index < ownSegments.length) {
+      const matches =
+        target.length > 0 &&
+        index + target.length <= ownSegments.length &&
+        target.every(
+          (segment, offset) => ownSegments[index + offset] === segment,
+        );
+      if (matches) {
+        resultingSegments.push(...replacementSegments);
+        index += target.length;
       } else {
-        currentPath = currentPath.replace(value, replacement);
-        searchIndex = matchingIndex + replacement.segments.length;
+        resultingSegments.push(ownSegments[index]);
+        index++;
       }
     }
 
-    return currentPath as this;
+    throwIfSegmentsArrayIsEmpty(
+      resultingSegments,
+      "'replaceAll' is attempting to create a Path with zero segments, which is invalid",
+    );
+
+    return (this.constructor as typeof Path).from(
+      resultingSegments,
+      this.separator,
+    ) as this;
   }
 
   /**
@@ -528,11 +705,24 @@ export class Path {
    * @param replacement - The new final segment(s) for the returned Path
    */
   replaceLast(replacement: string | Path | Array<string | Path>): this {
-    replacement = new (this.constructor as typeof Path)(replacement);
+    throwIfSegmentsArrayIsEmpty(
+      this.segments,
+      "Cannot replace the last segment of a Path with zero segments",
+    );
+
+    replacement = (
+      this.constructor as typeof Path
+    )._internalConstructorAllowInvalid([replacement]);
 
     const segments = [...this.segments];
     segments.pop();
     segments.push(...replacement.segments);
+
+    throwIfSegmentsArrayIsEmpty(
+      segments,
+      "'replaceLast' is attempting to create a Path with zero segments, which is invalid",
+    );
+    throwIfSegmentsArrayHasHoles(segments);
 
     return (this.constructor as typeof Path).from(
       segments,
@@ -548,7 +738,12 @@ export class Path {
    */
   equals(other: string | Path | Array<string | Path>): boolean {
     if (!(this.constructor as typeof Path).isPath(other)) {
-      other = new (this.constructor as typeof Path)(other);
+      // It's surprising if an error is thrown about invalid Paths when you're
+      // just trying to compare them, so we bypass the constructor's error
+      // checks.
+      other = (
+        this.constructor as typeof Path
+      )._internalConstructorAllowInvalid([other]);
     }
 
     return other.separator === this.separator && this.hasEqualSegments(other);
@@ -560,7 +755,12 @@ export class Path {
    */
   hasEqualSegments(other: string | Path | Array<string | Path>): boolean {
     if (!(this.constructor as typeof Path).isPath(other)) {
-      other = new (this.constructor as typeof Path)(other);
+      // It's surprising if an error is thrown about invalid Paths when you're
+      // just trying to compare them, so we bypass the constructor's error
+      // checks.
+      other = (
+        this.constructor as typeof Path
+      )._internalConstructorAllowInvalid([other]);
     }
 
     return (
