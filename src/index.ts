@@ -434,6 +434,8 @@ export class Path {
     let result = this.segments.join(this.separator);
     if ((this.constructor as typeof Path)._isWin32DriveLetter(result)) {
       return result + this.separator;
+    } else if (this.segments.length === 1 && this.segments[0] === "") {
+      return this.separator;
     } else {
       return result;
     }

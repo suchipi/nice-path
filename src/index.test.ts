@@ -1128,3 +1128,8 @@ test("Path.relativeTo - dir with zero segments throws", () => {
     `[PathErrors.ZeroSegmentsError: Cannot express a path relative to a Path with zero segments]`,
   );
 });
+
+test("Path.toString() - filesystem root", () => {
+  const result = new Path("/").toString();
+  expect(result).toMatchInlineSnapshot(`"/"`);
+});
